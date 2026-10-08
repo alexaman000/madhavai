@@ -63,10 +63,15 @@ export class AuthService {
     // Store hashed OTP in database
     await this.db.createOtpRecord(email, otpHash, expiresAt);
 
-    // Deliver via Nodemailer / Resend asynchronously in background (instant 50ms UI response)
-    this.emailService.sendOtpEmail(email, rawOtp).catch((err) => {
+    // Deliver via Nodemailer / Resend
+    try {
+      const sent = await this.emailService.sendOtpEmail(email, rawOtp);
+      if (!sent) {
+        this.logger.warn(`Email delivery returned false for ${email}`);
+      }
+    } catch (err: any) {
       this.logger.error(`Failed to deliver OTP email to ${email}: ${err.message}`);
-    });
+    }
 
     return {
       success: true,
