@@ -16,22 +16,25 @@ export class EmailService {
 
     if (smtpHost && smtpUser && smtpPass) {
       try {
-        const port = parseInt(process.env.SMTP_PORT || '587', 10);
-        const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+        const port = parseInt(process.env.SMTP_PORT || '465', 10);
+        const secure = process.env.SMTP_SECURE === 'false' ? false : true;
 
         this.smtpTransporter = nodemailer.createTransport({
           host: smtpHost,
           port,
           secure,
-          connectionTimeout: 5000,
-          greetingTimeout: 5000,
-          socketTimeout: 5000,
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000,
           auth: {
             user: smtpUser,
             pass: smtpPass,
           },
+          tls: {
+            rejectUnauthorized: false,
+          },
         });
-        this.logger.log(`📧 Gmail SMTP Transport initialized for ${smtpUser} (No domain required).`);
+        this.logger.log(`📧 Gmail SMTP Transport initialized on port ${port} SSL for ${smtpUser}.`);
       } catch (err: any) {
         this.logger.warn(`Failed to initialize SMTP transport: ${err.message}`);
       }
