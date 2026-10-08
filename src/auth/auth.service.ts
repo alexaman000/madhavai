@@ -26,6 +26,9 @@ export class AuthService {
 
   async requestOtp(dto: RequestOtpDto) {
     const email = dto.email.toLowerCase().trim();
+    const maskedEmail = email.replace(/^(.)(.*)(@.*)$/, (_, p1, p2, p3) => `${p1}***${p3}`);
+
+    this.logger.log(`[AUTH] OTP request received for ${maskedEmail}`);
 
     // Check optional email domain restriction
     const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN;
@@ -35,6 +38,7 @@ export class AuthService {
         throw new BadRequestException(`Only @${domain} email addresses are allowed.`);
       }
     }
+    this.logger.log(`[AUTH] Email validation passed`);
 
     // Check resend cooldown
     const cooldownSeconds = parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS || '60', 10);
@@ -54,28 +58,33 @@ export class AuthService {
 
     // Generate cryptographically secure 6-digit OTP
     const rawOtp = crypto.randomInt(100000, 1000000).toString();
-    const otpHash = this.hashOtp(rawOtp);
+    this.logger.log(`[AUTH] OTP generated`);
 
-    // Calculate expiration
-    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10);
+    const otpHash = this.hashOtp(rawOtp);
+    this.logger.log(`[AUTH] OTP hash created`);
+
+    // Call Resend API
+    const resendResult = await this.emailService.sendOtpEmail(email, rawOtp);
+
+    if (!resendResult.success) {
+      this.logger.error(`[AUTH] Resend API call failed for ${maskedEmail}: ${resendResult.error}`);
+      throw new BadRequestException(
+        resendResult.error && resendResult.error.includes('testing emails')
+          ? `Resend Free Domain Restriction: You can only send testing emails to alexaman000r@gmail.com until a custom domain is verified at resend.com/domains.`
+          : 'Unable to send verification code. Please check recipient email or try again.',
+      );
+    }
+
+    // Calculate expiration & store in DB ONLY after email is accepted by Resend
+    const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES || '15', 10);
     const expiresAt = new Date(Date.now() + expiryMinutes * 60 * 1000);
 
-    // Store hashed OTP in database
     await this.db.createOtpRecord(email, otpHash, expiresAt);
-
-    // Deliver via Nodemailer / Resend
-    try {
-      const sent = await this.emailService.sendOtpEmail(email, rawOtp);
-      if (!sent) {
-        this.logger.warn(`Email delivery returned false for ${email}`);
-      }
-    } catch (err: any) {
-      this.logger.error(`Failed to deliver OTP email to ${email}: ${err.message}`);
-    }
+    this.logger.log(`[AUTH] OTP database record created for ${maskedEmail}`);
 
     return {
       success: true,
-      message: 'If the email is eligible, a verification code has been sent.',
+      message: 'Verification code has been sent successfully.',
     };
   }
 
