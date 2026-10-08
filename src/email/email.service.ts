@@ -1,45 +1,61 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private resendClient: Resend | null = null;
+  private smtpTransporter: nodemailer.Transporter | null = null;
 
   constructor() {
+    // 1. Initialize Gmail SMTP (Works for ALL recipient domains without needing a custom domain)
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpUser = process.env.SMTP_USER || 'alexaman000r@gmail.com';
+    const smtpPass = process.env.SMTP_PASS || 'ymtizlqmoudnwnnj';
+
+    if (smtpHost && smtpUser && smtpPass) {
+      try {
+        const port = parseInt(process.env.SMTP_PORT || '587', 10);
+        const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
+        this.smtpTransporter = nodemailer.createTransport({
+          host: smtpHost,
+          port,
+          secure,
+          connectionTimeout: 5000,
+          greetingTimeout: 5000,
+          socketTimeout: 5000,
+          auth: {
+            user: smtpUser,
+            pass: smtpPass,
+          },
+        });
+        this.logger.log(`📧 Gmail SMTP Transport initialized for ${smtpUser} (No domain required).`);
+      } catch (err: any) {
+        this.logger.warn(`Failed to initialize SMTP transport: ${err.message}`);
+      }
+    }
+
+    // 2. Initialize Resend as fallback
     const apiKey = process.env.RESEND_API_KEY;
-    const isApiKeyConfigured = Boolean(apiKey && apiKey.startsWith('re_'));
-    const isFromEmailConfigured = Boolean(process.env.RESEND_FROM_EMAIL);
-
-    this.logger.log(`[EMAIL_CONFIG] RESEND_API_KEY configured: ${isApiKeyConfigured}`);
-    this.logger.log(`[EMAIL_CONFIG] RESEND_FROM_EMAIL configured: ${isFromEmailConfigured}`);
-
-    if (isApiKeyConfigured) {
+    if (apiKey && apiKey.startsWith('re_')) {
       try {
         this.resendClient = new Resend(apiKey);
         this.logger.log(`📧 Resend Email Service initialized.`);
       } catch (err: any) {
-        this.logger.error(`[RESEND INIT ERROR] Failed to initialize Resend client: ${err.message}`);
+        this.logger.warn(`Failed to initialize Resend client: ${err.message}`);
       }
-    } else {
-      this.logger.warn(`⚠️ RESEND_API_KEY missing or invalid.`);
     }
   }
 
   async sendOtpEmail(toEmail: string, otp: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    const from = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const from = process.env.SMTP_FROM || '"Madhav.ai" <alexaman000r@gmail.com>';
     const subject = 'Your Madhav.ai verification code';
     const expiryMinutes = process.env.OTP_EXPIRY_MINUTES || '15';
 
-    // Mask recipient email for safe logging (e.g. a***@gmail.com)
     const maskedEmail = toEmail.replace(/^(.)(.*)(@.*)$/, (_, p1, p2, p3) => `${p1}***${p3}`);
-
-    this.logger.log(`[AUTH] Attempting Resend API call for ${maskedEmail}`);
-
-    if (!this.resendClient) {
-      this.logger.error(`[RESEND ERROR] Resend client is not initialized.`);
-      return { success: false, error: 'Resend client not configured.' };
-    }
+    this.logger.log(`[AUTH] Attempting OTP email delivery for ${maskedEmail}`);
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -73,30 +89,47 @@ export class EmailService {
       </html>
     `;
 
-    try {
-      const result = await this.resendClient.emails.send({
-        from,
-        to: toEmail,
-        subject,
-        html: htmlContent,
-      });
-
-      this.logger.log(`[AUTH] Resend API response received for ${maskedEmail}`);
-
-      if (result.error) {
-        this.logger.error(`[RESEND ERROR] status: ${result.error.name}, message: ${result.error.message}`);
-        return { success: false, error: result.error.message };
+    // 1. Try Gmail SMTP first (Delivers to ANY recipient on earth without needing a domain!)
+    if (this.smtpTransporter) {
+      try {
+        const info = await this.smtpTransporter.sendMail({
+          from,
+          to: toEmail,
+          subject,
+          html: htmlContent,
+        });
+        this.logger.log(`✅ [SMTP SUCCESS] Verification email sent to ${maskedEmail}. Message ID: ${info.messageId}`);
+        return { success: true, messageId: info.messageId };
+      } catch (err: any) {
+        this.logger.error(`[SMTP ERROR] Delivery failed for ${maskedEmail}: ${err.message}`);
       }
-
-      if (result.data && result.data.id) {
-        this.logger.log(`[RESEND] Email accepted. Message ID: ${result.data.id}`);
-        return { success: true, messageId: result.data.id };
-      }
-
-      return { success: false, error: 'No message ID returned by Resend.' };
-    } catch (err: any) {
-      this.logger.error(`[RESEND EXCEPTION] ${err.message}`);
-      return { success: false, error: err.message };
     }
+
+    // 2. Try Resend as fallback
+    if (this.resendClient) {
+      try {
+        const result = await this.resendClient.emails.send({
+          from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+          to: toEmail,
+          subject,
+          html: htmlContent,
+        });
+
+        if (result.error) {
+          this.logger.error(`[RESEND ERROR] status: ${result.error.name}, message: ${result.error.message}`);
+          return { success: false, error: result.error.message };
+        }
+
+        if (result.data && result.data.id) {
+          this.logger.log(`✅ [RESEND SUCCESS] Email accepted. Message ID: ${result.data.id}`);
+          return { success: true, messageId: result.data.id };
+        }
+      } catch (err: any) {
+        this.logger.error(`[RESEND EXCEPTION] ${err.message}`);
+        return { success: false, error: err.message };
+      }
+    }
+
+    return { success: false, error: 'No email service available.' };
   }
 }
