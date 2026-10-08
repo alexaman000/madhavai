@@ -9,15 +9,15 @@ export class EmailService {
   private smtpTransporter: nodemailer.Transporter | null = null;
 
   constructor() {
-    // 1. Initialize SMTP transporter if SMTP env vars exist
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
+    // 1. Initialize SMTP transporter with Gmail SMTP defaults
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpUser = process.env.SMTP_USER || 'alexaman000r@gmail.com';
+    const smtpPass = process.env.SMTP_PASS || 'ymtizlqmoudnwnnj';
 
     if (smtpHost && smtpUser && smtpPass) {
       try {
-        const port = parseInt(process.env.SMTP_PORT || '587', 10);
-        const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+        const port = parseInt(process.env.SMTP_PORT || '465', 10);
+        const secure = process.env.SMTP_SECURE === 'false' ? false : true;
 
         this.smtpTransporter = nodemailer.createTransport({
           host: smtpHost,
@@ -28,7 +28,7 @@ export class EmailService {
             pass: smtpPass,
           },
         });
-        this.logger.log(`📧 SMTP Transport initialized (${smtpHost}:${port}).`);
+        this.logger.log(`📧 SMTP Transport initialized (${smtpHost}:${port}) for ${smtpUser}.`);
       } catch (err: any) {
         this.logger.warn(`Failed to initialize SMTP transport: ${err.message}`);
       }
@@ -47,7 +47,7 @@ export class EmailService {
   }
 
   async sendOtpEmail(toEmail: string, otp: string): Promise<boolean> {
-    const from = process.env.SMTP_FROM || process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    const from = process.env.SMTP_FROM || process.env.RESEND_FROM_EMAIL || '"Madhav.ai" <alexaman000r@gmail.com>';
     const subject = 'Your Madhav.ai verification code';
     const expiryMinutes = process.env.OTP_EXPIRY_MINUTES || '15';
 
