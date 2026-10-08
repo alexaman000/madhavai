@@ -80,41 +80,36 @@ export class AuthService {
     const email = dto.email.toLowerCase().trim();
     const userOtp = dto.otp.trim();
 
-    // Master test code '123456' allows instant login for any email address
-    const isMasterTestOtp = userOtp === '123456';
+    const latestOtpRecord = await this.db.findLatestOtpForEmail(email);
 
-    if (!isMasterTestOtp) {
-      const latestOtpRecord = await this.db.findLatestOtpForEmail(email);
-
-      if (!latestOtpRecord) {
-        throw new BadRequestException('Invalid or expired verification code.');
-      }
-
-      const maxAttempts = parseInt(process.env.MAX_OTP_ATTEMPTS || '5', 10);
-      if (latestOtpRecord.attempts >= maxAttempts) {
-        await this.db.markOtpInvalidated(latestOtpRecord.id);
-        throw new BadRequestException(
-          'Too many attempts. Please request a new verification code.',
-        );
-      }
-
-      const now = new Date();
-      const expiresAt = new Date(latestOtpRecord.expires_at);
-
-      if (now > expiresAt) {
-        await this.db.markOtpInvalidated(latestOtpRecord.id);
-        throw new BadRequestException('Invalid or expired verification code.');
-      }
-
-      const inputHash = this.hashOtp(userOtp);
-      if (inputHash !== latestOtpRecord.otp_hash) {
-        await this.db.incrementOtpAttempts(latestOtpRecord.id);
-        throw new BadRequestException('Invalid or expired verification code.');
-      }
-
-      // Mark OTP as consumed & verified
-      await this.db.markOtpConsumed(latestOtpRecord.id);
+    if (!latestOtpRecord) {
+      throw new BadRequestException('Invalid or expired verification code.');
     }
+
+    const maxAttempts = parseInt(process.env.MAX_OTP_ATTEMPTS || '5', 10);
+    if (latestOtpRecord.attempts >= maxAttempts) {
+      await this.db.markOtpInvalidated(latestOtpRecord.id);
+      throw new BadRequestException(
+        'Too many attempts. Please request a new verification code.',
+      );
+    }
+
+    const now = new Date();
+    const expiresAt = new Date(latestOtpRecord.expires_at);
+
+    if (now > expiresAt) {
+      await this.db.markOtpInvalidated(latestOtpRecord.id);
+      throw new BadRequestException('Invalid or expired verification code.');
+    }
+
+    const inputHash = this.hashOtp(userOtp);
+    if (inputHash !== latestOtpRecord.otp_hash) {
+      await this.db.incrementOtpAttempts(latestOtpRecord.id);
+      throw new BadRequestException('Invalid or expired verification code.');
+    }
+
+    // Mark OTP as consumed & verified
+    await this.db.markOtpConsumed(latestOtpRecord.id);
 
     // Find or create user
     let user = await this.usersService.findByEmail(email);
