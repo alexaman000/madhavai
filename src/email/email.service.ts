@@ -92,9 +92,9 @@ export class EmailService {
       </html>
     `;
 
-    // 1. Try Brevo HTTPS API if BREVO_API_KEY exists (Port 443 HTTPS - Works 100% on Cloud without domain)
+    // 1. Try Brevo HTTPS API (Port 443 HTTPS - Works 100% on Cloud without domain)
     const brevoApiKey = process.env.BREVO_API_KEY;
-    if (brevoApiKey) {
+    if (brevoApiKey && brevoApiKey.startsWith('xkeysib-')) {
       try {
         const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
           method: 'POST',
