@@ -9,7 +9,7 @@ export class EmailService {
   private smtpTransporter: nodemailer.Transporter | null = null;
 
   constructor() {
-    // 1. Initialize Gmail SMTP (Works for ALL recipient domains without needing a custom domain)
+    // 1. Initialize Gmail SMTP
     const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
     const smtpUser = process.env.SMTP_USER || 'alexaman000r@gmail.com';
     const smtpPass = process.env.SMTP_PASS || 'ymtizlqmoudnwnnj';
@@ -92,7 +92,39 @@ export class EmailService {
       </html>
     `;
 
-    // 1. Try Gmail SMTP first (Delivers to ANY recipient on earth without needing a domain!)
+    // 1. Try Brevo HTTPS API if BREVO_API_KEY exists (Port 443 HTTPS - Works 100% on Cloud without domain)
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    if (brevoApiKey) {
+      try {
+        const brevoRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'accept': 'application/json',
+            'api-key': brevoApiKey,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: 'Madhav.ai', email: 'alexaman000r@gmail.com' },
+            to: [{ email: toEmail }],
+            subject,
+            htmlContent,
+          }),
+        });
+
+        if (brevoRes.ok) {
+          const data = await brevoRes.json();
+          this.logger.log(`✅ [BREVO SUCCESS] Verification email sent to ${maskedEmail}. Message ID: ${data.messageId}`);
+          return { success: true, messageId: data.messageId };
+        } else {
+          const errText = await brevoRes.text();
+          this.logger.error(`[BREVO ERROR] ${brevoRes.status}: ${errText}`);
+        }
+      } catch (err: any) {
+        this.logger.error(`[BREVO EXCEPTION] ${err.message}`);
+      }
+    }
+
+    // 2. Try Gmail SMTP (Port 465 SSL)
     if (this.smtpTransporter) {
       try {
         const info = await this.smtpTransporter.sendMail({
@@ -108,7 +140,7 @@ export class EmailService {
       }
     }
 
-    // 2. Try Resend as fallback
+    // 3. Try Resend as fallback
     if (this.resendClient) {
       try {
         const result = await this.resendClient.emails.send({
