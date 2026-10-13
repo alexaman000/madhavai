@@ -1,6 +1,7 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ChatService } from './chat.service';
 import { ChatRequestDto } from './dto/chat-request.dto';
+import { RagResponseDto } from './chat.interfaces';
 
 @Controller('chat')
 export class ChatController {
@@ -8,7 +9,7 @@ export class ChatController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  chat(@Body() dto: ChatRequestDto) {
+  async chat(@Body() dto: ChatRequestDto): Promise<RagResponseDto> {
     return this.chatService.handleChat(dto);
   }
 }
