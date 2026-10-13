@@ -253,4 +253,453 @@ export class DatabaseService implements OnModuleInit {
       }
     }
   }
+
+  // ==================== SCRIPTURE OPERATIONS ====================
+  private inMemoryScriptureSources: Map<string, any> = new Map();
+  private inMemoryScriptureChapters: Map<string, any> = new Map();
+  private inMemoryScriptureVerses: Map<string, any> = new Map();
+  private inMemoryScriptureTranslations: Map<string, any> = new Map();
+
+  async upsertScriptureSource(source: any): Promise<void> {
+    const record = {
+      ...source,
+      created_at: source.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (this.supabase) {
+      const { error } = await this.supabase
+        .from('scripture_sources')
+        .upsert(record, { onConflict: 'id' });
+      if (error) {
+        this.logger.warn(`Supabase upsertScriptureSource fallback to memory: ${error.message}`);
+      }
+    }
+    this.inMemoryScriptureSources.set(record.id, record);
+  }
+
+  async getScriptureSourceById(id: string): Promise<any | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_sources')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+    return this.inMemoryScriptureSources.get(id) || null;
+  }
+
+  async getAllScriptureSources(): Promise<any[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_sources')
+        .select('*');
+      if (!error && data) return data;
+    }
+    return Array.from(this.inMemoryScriptureSources.values());
+  }
+
+  async upsertScriptureChapter(chapter: any): Promise<void> {
+    const record = {
+      ...chapter,
+      created_at: chapter.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (this.supabase) {
+      const { error } = await this.supabase
+        .from('scripture_chapters')
+        .upsert(record, { onConflict: 'id' });
+      if (error) {
+        this.logger.warn(`Supabase upsertScriptureChapter fallback to memory: ${error.message}`);
+      }
+    }
+    this.inMemoryScriptureChapters.set(record.id, record);
+  }
+
+  async getScriptureChapter(scriptureId: string, chapterNumber: number): Promise<any | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_chapters')
+        .select('*')
+        .eq('scripture_id', scriptureId)
+        .eq('chapter_number', chapterNumber)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+    for (const ch of this.inMemoryScriptureChapters.values()) {
+      if (ch.scripture_id === scriptureId && ch.chapter_number === chapterNumber) {
+        return ch;
+      }
+    }
+    return null;
+  }
+
+  async getAllScriptureChapters(scriptureId: string): Promise<any[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_chapters')
+        .select('*')
+        .eq('scripture_id', scriptureId)
+        .order('chapter_number', { ascending: true });
+      if (!error && data && data.length > 0) return data;
+    }
+    const matches: any[] = [];
+    for (const ch of this.inMemoryScriptureChapters.values()) {
+      if (ch.scripture_id === scriptureId) {
+        matches.push(ch);
+      }
+    }
+    return matches.sort((a, b) => a.chapter_number - b.chapter_number);
+  }
+
+  async upsertScriptureVerse(verse: any): Promise<void> {
+    const record = {
+      ...verse,
+      created_at: verse.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (this.supabase) {
+      const { error } = await this.supabase
+        .from('scripture_verses')
+        .upsert(record, { onConflict: 'id' });
+      if (error) {
+        this.logger.warn(`Supabase upsertScriptureVerse fallback to memory: ${error.message}`);
+      }
+    }
+    this.inMemoryScriptureVerses.set(record.id, record);
+  }
+
+  async upsertScriptureVersesBatch(verses: any[]): Promise<void> {
+    if (!verses || verses.length === 0) return;
+    const now = new Date().toISOString();
+    const records = verses.map((v) => ({
+      ...v,
+      created_at: v.created_at || now,
+      updated_at: now,
+    }));
+    if (this.supabase) {
+      const chunkSize = 100;
+      for (let i = 0; i < records.length; i += chunkSize) {
+        const chunk = records.slice(i, i + chunkSize);
+        const { error } = await this.supabase
+          .from('scripture_verses')
+          .upsert(chunk, { onConflict: 'id' });
+        if (error) {
+          this.logger.warn(`Supabase upsertScriptureVersesBatch error: ${error.message}`);
+        }
+      }
+    }
+    for (const r of records) {
+      this.inMemoryScriptureVerses.set(r.id, r);
+    }
+  }
+
+  async getScriptureVerse(
+    scriptureId: string,
+    chapterNumber: number,
+    verseNumber: number,
+  ): Promise<any | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_verses')
+        .select('*')
+        .eq('scripture_id', scriptureId)
+        .eq('chapter_number', chapterNumber)
+        .eq('verse_number', verseNumber)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+    for (const v of this.inMemoryScriptureVerses.values()) {
+      if (
+        v.scripture_id === scriptureId &&
+        v.chapter_number === chapterNumber &&
+        v.verse_number === verseNumber
+      ) {
+        return v;
+      }
+    }
+    return null;
+  }
+
+  async upsertScriptureTranslation(translation: any): Promise<void> {
+    const record = {
+      ...translation,
+      created_at: translation.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (this.supabase) {
+      const { error } = await this.supabase
+        .from('scripture_translations')
+        .upsert(record, { onConflict: 'id' });
+      if (error) {
+        this.logger.warn(`Supabase upsertScriptureTranslation fallback to memory: ${error.message}`);
+      }
+    }
+    this.inMemoryScriptureTranslations.set(record.id, record);
+  }
+
+  async upsertScriptureTranslationsBatch(translations: any[]): Promise<void> {
+    if (!translations || translations.length === 0) return;
+    const now = new Date().toISOString();
+    const records = translations.map((t) => ({
+      ...t,
+      created_at: t.created_at || now,
+      updated_at: now,
+    }));
+    if (this.supabase) {
+      const chunkSize = 100;
+      for (let i = 0; i < records.length; i += chunkSize) {
+        const chunk = records.slice(i, i + chunkSize);
+        const { error } = await this.supabase
+          .from('scripture_translations')
+          .upsert(chunk, { onConflict: 'id' });
+        if (error) {
+          this.logger.warn(`Supabase upsertScriptureTranslationsBatch error: ${error.message}`);
+        }
+      }
+    }
+    for (const r of records) {
+      this.inMemoryScriptureTranslations.set(r.id, r);
+    }
+  }
+
+  async getScriptureTranslationsForVerse(verseId: string): Promise<any[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_translations')
+        .select('*')
+        .eq('verse_id', verseId);
+      if (!error && data && data.length > 0) return data;
+    }
+    const matches: any[] = [];
+    for (const tr of this.inMemoryScriptureTranslations.values()) {
+      if (tr.verse_id === verseId) {
+        matches.push(tr);
+      }
+    }
+    return matches;
+  }
+
+  async getAllScriptureVerses(scriptureId: string = 'bhagavad-gita'): Promise<any[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_verses')
+        .select('*')
+        .eq('scripture_id', scriptureId)
+        .order('chapter_number', { ascending: true })
+        .order('verse_number', { ascending: true });
+      if (!error && data) return data;
+    }
+    const matches: any[] = [];
+    for (const v of this.inMemoryScriptureVerses.values()) {
+      if (v.scripture_id === scriptureId) matches.push(v);
+    }
+    return matches.sort((a, b) => a.chapter_number - b.chapter_number || a.verse_number - b.verse_number);
+  }
+
+  async getAllScriptureTranslations(): Promise<any[]> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_translations')
+        .select('*');
+      if (!error && data) return data;
+    }
+    return Array.from(this.inMemoryScriptureTranslations.values());
+  }
+
+  // ==================== EMBEDDING OPERATIONS ====================
+  private inMemoryScriptureEmbeddings: Map<string, any> = new Map();
+
+  async upsertScriptureEmbedding(embeddingRecord: any): Promise<void> {
+    const record = {
+      ...embeddingRecord,
+      created_at: embeddingRecord.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (this.supabase) {
+      const { error } = await this.supabase
+        .from('scripture_embeddings')
+        .upsert(record, { onConflict: 'id' });
+      if (error) {
+        this.logger.warn(`Supabase upsertScriptureEmbedding fallback to memory: ${error.message}`);
+      }
+    }
+    this.inMemoryScriptureEmbeddings.set(record.id, record);
+  }
+
+  async upsertScriptureEmbeddingsBatch(embeddingRecords: any[]): Promise<void> {
+    if (!embeddingRecords || embeddingRecords.length === 0) return;
+    const now = new Date().toISOString();
+    const records = embeddingRecords.map((r) => ({
+      ...r,
+      created_at: r.created_at || now,
+      updated_at: now,
+    }));
+    if (this.supabase) {
+      const chunkSize = 50;
+      for (let i = 0; i < records.length; i += chunkSize) {
+        const chunk = records.slice(i, i + chunkSize);
+        const { error } = await this.supabase
+          .from('scripture_embeddings')
+          .upsert(chunk, { onConflict: 'id' });
+        if (error) {
+          this.logger.warn(`Supabase upsertScriptureEmbeddingsBatch error: ${error.message}`);
+        }
+      }
+    }
+    for (const r of records) {
+      this.inMemoryScriptureEmbeddings.set(r.id, r);
+    }
+  }
+
+  async getScriptureEmbedding(verseId: string, translationId?: string, model?: string): Promise<any | null> {
+    if (this.supabase) {
+      let query = this.supabase
+        .from('scripture_embeddings')
+        .select('*')
+        .eq('verse_id', verseId);
+      if (translationId) query = query.eq('translation_id', translationId);
+      if (model) query = query.eq('model', model);
+      const { data, error } = await query.maybeSingle();
+      if (!error && data) return data;
+    }
+    for (const emb of this.inMemoryScriptureEmbeddings.values()) {
+      if (
+        emb.verse_id === verseId &&
+        (!translationId || emb.translation_id === translationId) &&
+        (!model || emb.model === model)
+      ) {
+        return emb;
+      }
+    }
+    return null;
+  }
+
+  async getAllScriptureEmbeddings(model?: string): Promise<any[]> {
+    if (this.supabase) {
+      let query = this.supabase.from('scripture_embeddings').select('*');
+      if (model) query = query.eq('model', model);
+      const { data, error } = await query;
+      if (!error && data) return data;
+    }
+    const matches: any[] = [];
+    for (const emb of this.inMemoryScriptureEmbeddings.values()) {
+      if (!model || emb.model === model) matches.push(emb);
+    }
+    return matches;
+  }
+
+  async getScriptureVerseById(verseId: string): Promise<any | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_verses')
+        .select('*')
+        .eq('id', verseId)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+    return this.inMemoryScriptureVerses.get(verseId) || null;
+  }
+
+  async getScriptureTranslationById(translationId: string): Promise<any | null> {
+    if (this.supabase) {
+      const { data, error } = await this.supabase
+        .from('scripture_translations')
+        .select('*')
+        .eq('id', translationId)
+        .maybeSingle();
+      if (!error && data) return data;
+    }
+    return this.inMemoryScriptureTranslations.get(translationId) || null;
+  }
+
+  async searchScriptureEmbeddings(
+    queryEmbedding: number[],
+    limit: number = 5,
+    matchThreshold: number = 0.0,
+    language?: string,
+  ): Promise<any[]> {
+    // 1. Try calling Supabase RPC match_scripture_embeddings
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase.rpc('match_scripture_embeddings', {
+          query_embedding: queryEmbedding,
+          match_threshold: matchThreshold,
+          match_count: limit,
+          filter_language: language || null,
+        });
+        if (!error && data && Array.isArray(data)) {
+          return data;
+        }
+        if (error) {
+          this.logger.debug(`Supabase RPC match_scripture_embeddings notice: ${error.message}. Using vector cosine computation fallback.`);
+        }
+      } catch (err: any) {
+        this.logger.debug(`RPC call exception: ${err.message}. Using vector cosine computation fallback.`);
+      }
+    }
+
+    // 2. Fallback: Fetch stored embeddings from Supabase or memory, and compute cosine similarity
+    const records = await this.getAllScriptureEmbeddings();
+    if (!records || records.length === 0) return [];
+
+    const queryNorm = Math.sqrt(queryEmbedding.reduce((sum, v) => sum + v * v, 0));
+    if (queryNorm === 0) return [];
+
+    const scored: any[] = [];
+    for (const rec of records) {
+      let vec: number[] = [];
+      if (Array.isArray(rec.embedding)) {
+        vec = rec.embedding;
+      } else if (typeof rec.embedding === 'string') {
+        try {
+          vec = JSON.parse(rec.embedding);
+        } catch {
+          vec = [];
+        }
+      }
+      if (!vec || vec.length !== queryEmbedding.length) {
+        continue;
+      }
+
+      // Check language filter if specified
+      if (language && rec.translation_id) {
+        const lang = rec.metadata?.language;
+        if (lang) {
+          if (lang !== language) continue;
+        } else {
+          const tr = await this.getScriptureTranslationById(rec.translation_id);
+          if (tr && tr.language !== language) {
+            continue;
+          }
+        }
+      }
+
+      let dot = 0;
+      let vecNormSq = 0;
+      for (let i = 0; i < vec.length; i++) {
+        dot += vec[i] * queryEmbedding[i];
+        vecNormSq += vec[i] * vec[i];
+      }
+      const vecNorm = Math.sqrt(vecNormSq);
+      const similarity = vecNorm > 0 ? dot / (queryNorm * vecNorm) : 0;
+      if (similarity >= matchThreshold) {
+        scored.push({
+          id: rec.id,
+          verse_id: rec.verse_id,
+          translation_id: rec.translation_id,
+          source_id: rec.source_id,
+          model: rec.model,
+          similarity: Number(similarity.toFixed(6)),
+          input_text: rec.input_text,
+          metadata: rec.metadata,
+        });
+      }
+    }
+
+    scored.sort((a, b) => b.similarity - a.similarity);
+    return scored.slice(0, limit);
+  }
 }
+
+
