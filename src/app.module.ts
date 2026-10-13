@@ -6,6 +6,8 @@ import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
+import { ScripturesModule } from './scriptures/scriptures.module';
+import { EmbeddingsModule } from './embeddings/embeddings.module';
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { AuthModule } from './auth/auth.module';
     AuthModule,
     HealthModule,
     ChatModule,
+    ScripturesModule,
+    EmbeddingsModule,
   ],
   controllers: [],
   providers: [],
