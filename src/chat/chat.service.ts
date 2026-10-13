@@ -1,16 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ChatRequestDto } from './dto/chat-request.dto';
+import { RagService } from './rag.service';
+import { RagResponseDto } from './chat.interfaces';
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
-  handleChat(dto: ChatRequestDto) {
-    this.logger.log(`Incoming chat message: "${dto.message}"`);
+  constructor(private readonly ragService: RagService) {}
 
-    return {
-      success: true,
-      response: 'Namaste 🙏 I am Madhav. Your backend is working.',
-    };
+  /**
+   * Main entry point for chat requests.
+   * Delegates to RagService to perform grounded retrieval-augmented generation.
+   */
+  async handleChat(dto: ChatRequestDto): Promise<RagResponseDto> {
+    this.logger.log(`Incoming chat message: "${dto.message}" (limit: ${dto.limit || 5})`);
+    return this.ragService.generateAnswer(dto);
   }
 }
