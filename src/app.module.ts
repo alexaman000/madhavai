@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ScripturesModule } from './scriptures/scriptures.module';
 import { EmbeddingsModule } from './embeddings/embeddings.module';
+import { TtsModule } from './tts/tts.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EmbeddingsModule } from './embeddings/embeddings.module';
     ChatModule,
     ScripturesModule,
     EmbeddingsModule,
+    TtsModule,
   ],
   controllers: [],
   providers: [],

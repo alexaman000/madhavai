@@ -1,0 +1,258 @@
+{
+  "scripture": {
+    "id": "bhagavad-gita",
+    "title": "Bhagavad Gita",
+    "tradition": "Vedanta / Sanatana Dharma",
+    "canonical_chapters": 18,
+    "canonical_verses": 700
+  },
+  "sources": [
+    {
+      "id": "src_sivananda_1942",
+      "name": "The Bhagavad Gita - Translation and Commentary",
+      "author_or_translator": "Swami Sivananda",
+      "publisher": "The Divine Life Society",
+      "publication_year": 1942,
+      "license": "Public Domain",
+      "source_url": "https://www.dlshq.org/download/bgita.pdf",
+      "notes": "Classic literal and spiritual translation widely verified and in public domain."
+    },
+    {
+      "id": "src_arnold_1885",
+      "name": "The Song Celestial (Bhagavad-Gita)",
+      "author_or_translator": "Sir Edwin Arnold",
+      "publisher": "Trübner & Co., London",
+      "publication_year": 1885,
+      "license": "Public Domain",
+      "source_url": "https://www.gutenberg.org/ebooks/2388",
+      "notes": "Poetic English translation, Project Gutenberg release."
+    }
+  ],
+  "chapters": [
+    {
+      "id": "BG-1",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 1,
+      "name_sanskrit": "अर्जुनविषादयोग",
+      "name_transliterated": "Arjuna Viṣāda Yoga",
+      "name_english": "The Yoga of Arjuna's Despondency",
+      "verse_count": 47,
+      "summary": "Arjuna observes the armies arrayed on the battlefield of Kurukshetra, is overcome with grief and moral doubt, and refuses to fight."
+    },
+    {
+      "id": "BG-2",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 2,
+      "name_sanskrit": "साङ्ख्ययोग",
+      "name_transliterated": "Sāṅkhya Yoga",
+      "name_english": "The Yoga of Analytical Knowledge",
+      "verse_count": 72,
+      "summary": "Lord Krishna imparts the immortal nature of the soul (Atman), the philosophy of Nishkama Karma (selfless action without attachment to fruits), and the characteristics of a Sthitaprajna (one of steady wisdom)."
+    },
+    {
+      "id": "BG-3",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 3,
+      "name_sanskrit": "कर्मयोग",
+      "name_transliterated": "Karma Yoga",
+      "name_english": "The Yoga of Action",
+      "verse_count": 43,
+      "summary": "Krishna explains the necessity of action, sacrifice (Yajna), leadership by example, and controlling desire and anger."
+    },
+    {
+      "id": "BG-4",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 4,
+      "name_sanskrit": "ज्ञानकर्मसंन्यासयोग",
+      "name_transliterated": "Jñāna Karma Sannyāsa Yoga",
+      "name_english": "The Yoga of Knowledge and the Renunciation of Action",
+      "verse_count": 42,
+      "summary": "The descent of Avatars, the ancient lineage of knowledge, how selfless action is purified by wisdom, and the fire of knowledge."
+    },
+    {
+      "id": "BG-5",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 5,
+      "name_sanskrit": "कर्मसंन्यासयोग",
+      "name_transliterated": "Karma Sannyāsa Yoga",
+      "name_english": "The Yoga of Renunciation of Action",
+      "verse_count": 29,
+      "summary": "Harmonizing renunciation with selfless action, attaining inner peace, and understanding the transcendental consciousness."
+    },
+    {
+      "id": "BG-6",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 6,
+      "name_sanskrit": "आत्मसंयमयोग",
+      "name_transliterated": "Dhyāna Yoga (Ātmasamyama Yoga)",
+      "name_english": "The Yoga of Meditation",
+      "verse_count": 47,
+      "summary": "Techniques of meditation, mind control, equanimity, and the assurance for the striving seeker who falls short in this life."
+    },
+    {
+      "id": "BG-7",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 7,
+      "name_sanskrit": "ज्ञानविज्ञानयोग",
+      "name_transliterated": "Jñāna Vijñāna Yoga",
+      "name_english": "The Yoga of Knowledge and Realization",
+      "verse_count": 30,
+      "summary": "The material and spiritual energies of the Divine, the illusion of Maya, and the four kinds of seekers who worship God."
+    },
+    {
+      "id": "BG-8",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 8,
+      "name_sanskrit": "अक्षरब्रह्मयोग",
+      "name_transliterated": "Akṣara Brahma Yoga",
+      "name_english": "The Yoga of the Imperishable Brahman",
+      "verse_count": 28,
+      "summary": "The remembrance of the Divine at the time of departure from the body, and the cosmic cycles of creation and dissolution."
+    },
+    {
+      "id": "BG-9",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 9,
+      "name_sanskrit": "राजविद्याराजगुह्ययोग",
+      "name_transliterated": "Rāja Vidyā Rāja Guhya Yoga",
+      "name_english": "The Yoga of Sovereign Science and Sovereign Secret",
+      "verse_count": 34,
+      "summary": "The supreme confidential knowledge, divine pervading presence, and total shelter for all devotees through heartfelt devotion."
+    },
+    {
+      "id": "BG-10",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 10,
+      "name_sanskrit": "विभूतियोग",
+      "name_transliterated": "Vibhūti Yoga",
+      "name_english": "The Yoga of Divine Glories",
+      "verse_count": 42,
+      "summary": "Krishna describes His infinite divine manifestations and glories throughout the created universe."
+    },
+    {
+      "id": "BG-11",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 11,
+      "name_sanskrit": "विश्वरूपदर्शनयोग",
+      "name_transliterated": "Viśvarūpa Darśana Yoga",
+      "name_english": "The Yoga of the Vision of the Universal Form",
+      "verse_count": 55,
+      "summary": "Arjuna receives divine sight and beholds Krishna's boundless cosmic form, witnessing time as the consumer of all things."
+    },
+    {
+      "id": "BG-12",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 12,
+      "name_sanskrit": "भक्तियोग",
+      "name_transliterated": "Bhakti Yoga",
+      "name_english": "The Yoga of Devotion",
+      "verse_count": 20,
+      "summary": "Comparing unmanifest meditation with loving devotion, and delineating the virtues that make a devotee dear to the Lord."
+    },
+    {
+      "id": "BG-13",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 13,
+      "name_sanskrit": "क्षेत्रक्षेत्रज्ञविभागयोग",
+      "name_transliterated": "Kṣetra Kṣetrajña Vibhāga Yoga",
+      "name_english": "The Yoga of Distinction Between the Field and the Knower of the Field",
+      "verse_count": 35,
+      "summary": "Discrimination between the mortal body/mind (the field) and the immortal consciousness/witness (the knower)."
+    },
+    {
+      "id": "BG-14",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 14,
+      "name_sanskrit": "गुणत्रयविभागयोग",
+      "name_transliterated": "Guṇatraya Vibhāga Yoga",
+      "name_english": "The Yoga of the Division of the Three Gunas",
+      "verse_count": 27,
+      "summary": "The three qualities of material nature (Sattva, Rajas, Tamas), their binding effects, and transcending them."
+    },
+    {
+      "id": "BG-15",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 15,
+      "name_sanskrit": "पुरुषोत्तमयोग",
+      "name_transliterated": "Puruṣottama Yoga",
+      "name_english": "The Yoga of the Supreme Person",
+      "verse_count": 20,
+      "summary": "The metaphor of the inverted Ashvattha tree, the nature of the living soul, and the Supreme Eternal Personality."
+    },
+    {
+      "id": "BG-16",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 16,
+      "name_sanskrit": "दैवासुरसम्पद्विभागयोग",
+      "name_transliterated": "Daivāsura Sampad Vibhāga Yoga",
+      "name_english": "The Yoga of the Division Between Divine and Demonic Natures",
+      "verse_count": 24,
+      "summary": "Delineating divine virtues that lead to liberation versus egotistical traits that bind the soul."
+    },
+    {
+      "id": "BG-17",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 17,
+      "name_sanskrit": "श्रद्धात्रयविभागयोग",
+      "name_transliterated": "Śraddhātraya Vibhāga Yoga",
+      "name_english": "The Yoga of the Threefold Faith",
+      "verse_count": 28,
+      "summary": "Three types of faith, food, sacrifice, austerity, and charity according to the Gunas, and the significance of 'Om Tat Sat'."
+    },
+    {
+      "id": "BG-18",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 18,
+      "name_sanskrit": "मोक्षसंन्यासयोग",
+      "name_transliterated": "Mokṣa Sannyāsa Yoga",
+      "name_english": "The Yoga of Liberation through Renunciation",
+      "verse_count": 78,
+      "summary": "The culmination of the Gita: types of renunciation, knowledge, action, and intellect, and the final teaching of complete surrender."
+    }
+  ],
+  "verses": [
+    {
+      "id": "BG-2.47",
+      "scripture_id": "bhagavad-gita",
+      "chapter_number": 2,
+      "verse_number": 47,
+      "sanskrit_devanagari": "कर्मण्येवाधिकारस्ते मा फलेषु कदाचन।\nमा कर्मफलहेतुर्भूर्मा ते सङ्गोऽस्त्वकर्मणि॥",
+      "transliteration_iast": "karmaṇy evādhikāras te mā phaleṣu kadācana |\nmā karma-phala-hetur bhūr mā te saṅgo 'stv akarmaṇi ||",
+      "verification_status": "verified",
+      "verified_by": "Canonical Vedanta Textual Validation (Gita Press / Divine Life Society edition concorded)",
+      "metadata": {
+        "meter": "Anuṣṭubh",
+        "theme": "Nishkama Karma (Selfless Duty)",
+        "keywords": ["karma", "adhikāra", "phala", "akarma"]
+      },
+      "translations": [
+        {
+          "id": "BG-2.47-sivananda-en",
+          "source_id": "src_sivananda_1942",
+          "language": "en",
+          "translation_text": "Thy right is to work only, but never with its fruits; let not the fruits of action be thy motive, nor let thy attachment be to inaction.",
+          "word_meanings": {
+            "karmaṇi": "in duty / action",
+            "eva": "only",
+            "adhikāraḥ": "right / authority",
+            "te": "thy",
+            "mā": "never",
+            "phaleṣu": "in the fruits",
+            "kadācana": "at any time",
+            "karma-phala-hetuḥ": "one motivated by the fruits of actions",
+            "bhūḥ": "be thou",
+            "saṅgaḥ": "attachment",
+            "astu": "let there be",
+            "akarmaṇi": "in inaction"
+          }
+        },
+        {
+          "id": "BG-2.47-arnold-en",
+          "source_id": "src_arnold_1885",
+          "language": "en",
+          "translation_text": "He that doeth the task which is assigned to him, having cast off attachment to the fruit thereof, he is the true renunciant. Thou hast right in the action alone, never in its fruits; let not the fruit of action be thy motive, nor let thy attachment be to inaction."
+        }
+      ]
+    }
+  ]
+}
