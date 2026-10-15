@@ -18,4 +18,7 @@ export class ChatRequestDto {
   @IsOptional()
   @IsString({ message: 'language must be a string' })
   language?: string;
+
+  @IsOptional()
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
