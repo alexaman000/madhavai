@@ -32,12 +32,28 @@ export class ChatController {
       (res as any).flushHeaders();
     }
 
+    // Immediately flush initial SSE comment to establish socket through reverse proxies
+    res.write(': connected\n\n');
+    if (typeof (res as any).flush === 'function') {
+      (res as any).flush();
+    }
+
     const abortController = new AbortController();
     req.on('close', () => {
       if (!res.writableEnded) {
         abortController.abort();
       }
     });
+
+    // 12-second heartbeat to prevent proxy read timeouts (e.g. Render / Cloudflare ECONNRESET)
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': keepalive\n\n');
+        if (typeof (res as any).flush === 'function') {
+          (res as any).flush();
+        }
+      }
+    }, 12000);
 
     const sendEvent = (event: string, data: any) => {
       if (!res.writableEnded) {
@@ -65,6 +81,7 @@ export class ChatController {
         });
       }
     } finally {
+      clearInterval(heartbeat);
       if (!res.writableEnded) {
         res.end();
       }
