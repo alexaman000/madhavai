@@ -1,9 +1,9 @@
-import { IsNotEmpty, IsOptional, IsString, MaxLength, IsNumber, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength, IsNumber, Min, Max, IsBoolean } from 'class-validator';
 
 export class SynthesizeSpeechDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(2500)
+  @MaxLength(10000)
   text: string;
 
   @IsString()
@@ -12,11 +12,11 @@ export class SynthesizeSpeechDto {
 
   @IsString()
   @IsOptional()
-  speaker?: string; // 'advait' | 'kabir' | 'dev' | 'shubh'
+  speaker?: string; // 'shubh' | 'ashutosh' | 'ratan' | 'dev' | 'kabir'
 
   @IsString()
   @IsOptional()
-  model?: string; // 'bulbul:v3' | 'bulbul:v4-flash'
+  model?: string; // 'bulbul:v3'
 
   @IsNumber()
   @IsOptional()
@@ -29,4 +29,12 @@ export class SynthesizeSpeechDto {
   @Min(0.01)
   @Max(1.0)
   temperature?: number;
+
+  @IsNumber()
+  @IsOptional()
+  chunkIndex?: number;
+
+  @IsBoolean()
+  @IsOptional()
+  prepareOnly?: boolean;
 }

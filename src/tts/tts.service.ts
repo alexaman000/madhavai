@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SynthesizeSpeechDto } from './dto/synthesize-speech.dto';
+import { SpeechNormalizer, DeliveryConfig, PreparedSpeech } from './speech-normalizer';
 
 export interface TtsResponse {
   success: boolean;
@@ -15,6 +16,12 @@ export interface TtsResponse {
   speaker: string;
   model: string;
   pace: number;
+  temperature: number;
+  deliveryStyle: string;
+  totalChunks: number;
+  currentChunkIndex: number;
+  chunkText: string;
+  chunks: string[];
 }
 
 @Injectable()
@@ -29,12 +36,12 @@ export class TtsService {
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>('SARVAM_API_KEY', '');
     this.defaultModel = this.configService.get<string>('SARVAM_TTS_MODEL', 'bulbul:v3');
-    this.defaultSpeaker = this.configService.get<string>('SARVAM_DEFAULT_SPEAKER', 'ratan');
+    this.defaultSpeaker = this.configService.get<string>('SARVAM_DEFAULT_SPEAKER', 'shubh');
     this.defaultPace = parseFloat(this.configService.get<string>('SARVAM_TTS_PACE', '0.90'));
-    this.defaultTemperature = parseFloat(this.configService.get<string>('SARVAM_TTS_TEMPERATURE', '0.6'));
+    this.defaultTemperature = parseFloat(this.configService.get<string>('SARVAM_TTS_TEMPERATURE', '0.70'));
 
     if (this.apiKey) {
-      this.logger.log(`✨ Sarvam AI Bulbul TTS initialized (Model: ${this.defaultModel}, Default Speaker: ${this.defaultSpeaker})`);
+      this.logger.log(`✨ Sarvam AI Bulbul TTS initialized (Model: ${this.defaultModel}, Default Speaker: ${this.defaultSpeaker}, Pace: ${this.defaultPace}, Temp: ${this.defaultTemperature})`);
     } else {
       this.logger.warn('⚠️ SARVAM_API_KEY is not configured in backend environment.');
     }
@@ -45,91 +52,44 @@ export class TtsService {
   }
 
   /**
-   * Pre-processes raw text for serene, natural spiritual delivery:
-   * - Expands scripture citations (e.g. BG 2.47 -> श्रीमद्भगवद्गीता अध्याय २, श्लोक ४७)
-   * - Strips markdown formatting, brackets, URLs
-   * - Converts abrupt dashes and semicolons to natural breath pauses
-   * - Adds respectful pauses after spiritual invocations
+   * Dedicated speech preparation: cleans, classifies delivery style, and segments into chunks
    */
-  cleanAndFormatSpeechText(rawText: string, isHindi: boolean): string {
-    if (!rawText || !rawText.trim()) return '';
-    let text = rawText;
-
-    // 1. Expand Scripture Verse citations into respectful spoken words
-    if (isHindi) {
-      text = text.replace(/\[?\bBG[- ]?([0-9]{1,2})[\.:]([0-9]{1,2})\]?/gi, 'श्रीमद्भगवद्गीता अध्याय $1, श्लोक $2, ');
-      text = text.replace(/\[?\bBG[- ]?([0-9]{1,2})\]?/gi, 'श्रीमद्भगवद्गीता अध्याय $1, ');
-    } else {
-      text = text.replace(/\[?\bBG[- ]?([0-9]{1,2})[\.:]([0-9]{1,2})\]?/gi, 'Bhagavad Gita Chapter $1, Verse $2, ');
-      text = text.replace(/\[?\bBG[- ]?([0-9]{1,2})\]?/gi, 'Bhagavad Gita Chapter $1, ');
-    }
-
-    // 2. Strip bracketed citation tags like [श्रीमद्भगवद्गीता]
-    text = text.replace(/\[[^\]]+\]/g, '');
-
-    // 3. Strip URLs
-    text = text.replace(/http[s]?:\/\/\S+/g, '');
-
-    // 4. Strip markdown formatting and bracket characters: * _ ` # ~ > ( ) [ ]
-    text = text.replace(/[*#_`~>()[\]]/g, ' ');
-
-    // 5. Replace dashes and semicolons with commas for natural breath pauses
-    text = text.replace(/[—–-]{2,}/g, ', ');
-    text = text.replace(/\s+[—–-]\s+/g, ', ');
-    text = text.replace(/;/g, ', ');
-
-    // 6. Convert bullet points and numbering into gentle thought transitions
-    text = text.replace(/^\s*[-*•]\s*/gm, '');
-    text = text.replace(/^\s*\d+\.\s*/gm, '');
-
-    // 7. Conversational warm pauses after spiritual addresses
-    if (isHindi) {
-      text = text.replace(/(हे पार्थ|प्रिय मित्र|वत्स|हे अर्जुन)[!|।,]?\s*/gi, '$1, ');
-    } else {
-      text = text.replace(/(Dear friend|O Partha|O Arjuna)[!,]?\s*/gi, '$1, ');
-    }
-
-    // 8. Clean repetitive punctuation and normalize whitespace
-    text = text.replace(/,\s*,+/g, ', ');
-    text = text.replace(/[,\s]*,[,\s]*/g, ', ');
-    text = text.replace(/\s+/g, ' ').trim();
-
-    // 9. Enforce Sarvam max character limit (2500 chars)
-    if (text.length > 2500) {
-      text = text.substring(0, 2490) + '...';
-    }
-
-    return text;
-  }
-
-  hasDevanagari(text: string): boolean {
-    return /[\u0900-\u097F]/.test(text);
+  prepareSpeech(text: string, language?: string): PreparedSpeech {
+    return SpeechNormalizer.prepare(text, language);
   }
 
   /**
-   * Synthesize natural speech using Sarvam AI Bulbul TTS API
+   * Synthesize natural speech using Sarvam AI Bulbul v3 TTS API
    */
   async synthesize(dto: SynthesizeSpeechDto): Promise<TtsResponse> {
     if (!this.isConfigured()) {
       throw new ServiceUnavailableException('Sarvam AI TTS provider is not configured. Please set SARVAM_API_KEY.');
     }
 
-    const isHindi = dto.language?.startsWith('hi') || this.hasDevanagari(dto.text);
-    const targetLanguageCode = isHindi ? 'hi-IN' : 'en-IN';
-    const cleanText = this.cleanAndFormatSpeechText(dto.text, isHindi);
+    // 1. Prepare speech: clean, classify, and segment
+    const prepared = this.prepareSpeech(dto.text, dto.language);
+    const { chunks, delivery, language } = prepared;
 
-    if (!cleanText || cleanText.trim().length === 0) {
+    if (!chunks || chunks.length === 0) {
       throw new BadRequestException('Cleaned speech text is empty.');
     }
 
+    // Determine target chunk to synthesize
+    const chunkIdx = typeof dto.chunkIndex === 'number' && dto.chunkIndex >= 0 && dto.chunkIndex < chunks.length
+      ? dto.chunkIndex
+      : 0;
+    const textToSynthesize = chunks[chunkIdx];
+
+    // Select parameters (allow DTO override, else context-aware delivery style, else default)
     const speaker = dto.speaker || this.defaultSpeaker;
     const model = dto.model || this.defaultModel;
-    const pace = dto.pace ?? this.defaultPace;
-    const temperature = dto.temperature ?? this.defaultTemperature;
+    const pace = dto.pace ?? delivery.pace ?? this.defaultPace;
+    const temperature = dto.temperature ?? delivery.temperature ?? this.defaultTemperature;
 
+    // Documented Bulbul v3 request payload
     const payload = {
-      text: cleanText,
-      target_language_code: targetLanguageCode,
+      text: textToSynthesize,
+      target_language_code: language,
       speaker,
       model,
       pace,
@@ -142,7 +102,10 @@ export class TtsService {
     const timeout = setTimeout(() => controller.abort(), 20000); // 20s timeout
 
     try {
-      this.logger.log(`Synthesizing speech via Sarvam AI [Model: ${model}, Speaker: ${speaker}, Lang: ${targetLanguageCode}]`);
+      this.logger.log(
+        `Synthesizing chunk [${chunkIdx + 1}/${chunks.length}] via Sarvam AI [Model: ${model}, Speaker: ${speaker}, Style: ${delivery.style}, Pace: ${pace}, Temp: ${temperature}]`,
+      );
+
       const response = await fetch('https://api.sarvam.ai/text-to-speech', {
         method: 'POST',
         headers: {
@@ -182,6 +145,12 @@ export class TtsService {
         speaker,
         model,
         pace,
+        temperature,
+        deliveryStyle: delivery.style,
+        totalChunks: chunks.length,
+        currentChunkIndex: chunkIdx,
+        chunkText: textToSynthesize,
+        chunks,
       };
     } catch (err: any) {
       clearTimeout(timeout);
@@ -189,7 +158,11 @@ export class TtsService {
         this.logger.error('Sarvam AI TTS request timed out after 20 seconds');
         throw new ServiceUnavailableException('Sarvam AI TTS request timed out.');
       }
-      if (err instanceof ServiceUnavailableException || err instanceof BadRequestException || err instanceof InternalServerErrorException) {
+      if (
+        err instanceof ServiceUnavailableException ||
+        err instanceof BadRequestException ||
+        err instanceof InternalServerErrorException
+      ) {
         throw err;
       }
       this.logger.error(`Unexpected error during Sarvam TTS synthesis: ${err.message}`, err.stack);
@@ -205,20 +178,22 @@ export class TtsService {
       model: this.defaultModel,
       defaultSpeaker: this.defaultSpeaker,
       defaultPace: this.defaultPace,
+      defaultTemperature: this.defaultTemperature,
       recommended: {
-        spiritualGuideMale: 'ratan', // Soft, warm, calming, spiritually reassuring companion
-        conversationalMale: 'dev',    // Friendly, gentle, reassuring
-        reflectiveMale: 'kabir',      // Reverent, grounded, soulful
-        gentleFemaleAlternative: 'priya', // Soft, caring, gentle Indian female
+        conversationalWarmMale: 'shubh',  // Natural, articulate, warm, clear Hindi/Sanskrit
+        contemplativeMale: 'ashutosh',    // Deep, mature, reflective
+        gentleCompanionMale: 'ratan',      // Soft, night-companion, comforting
+        reassuringMale: 'dev',             // Friendly, accessible
+        meditativeSoulfulMale: 'kabir',    // Reverent, meditative
+        gentleFemaleAlternative: 'priya',  // Soft, maternal, caring
       },
       catalog: [
-        { id: 'ratan', gender: 'male', description: 'Soft, warm, calming, emotionally reassuring companion (Default for Madhav)' },
-        { id: 'dev', gender: 'male', description: 'Gentle, reassuring conversational tone' },
+        { id: 'shubh', gender: 'male', description: 'Articulate, warm, clear conversational delivery (Recommended for Madhav)' },
+        { id: 'ashutosh', gender: 'male', description: 'Deep, mature, contemplative spiritual presence' },
+        { id: 'ratan', gender: 'male', description: 'Soft, calming, emotionally reassuring companion' },
+        { id: 'dev', gender: 'male', description: 'Friendly, reassuring conversational tone' },
         { id: 'kabir', gender: 'male', description: 'Warm, meditative, respectful delivery' },
-        { id: 'advait', gender: 'male', description: 'Wise, peaceful, contemplative spiritual guide' },
-        { id: 'aditya', gender: 'male', description: 'Natural, clear conversational delivery' },
-        { id: 'shubh', gender: 'male', description: 'Articulate, clear, balanced tone' },
-        { id: 'ashutosh', gender: 'male', description: 'Mature, composed presence' },
+        { id: 'advait', gender: 'male', description: 'Wise, peaceful, contemplative guide' },
         { id: 'priya', gender: 'female', description: 'Soft, compassionate, reassuring delivery' },
         { id: 'pooja', gender: 'female', description: 'Gentle, devotional delivery' },
       ],
