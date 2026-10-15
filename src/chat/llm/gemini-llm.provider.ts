@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleGenAI } from '@google/genai';
-import { ILlmProvider, LlmGenerateOptions, LlmGenerateResult } from './llm.interface';
+import {
+  ILlmProvider,
+  LlmGenerateOptions,
+  LlmGenerateResult,
+  LlmStreamOptions,
+} from './llm.interface';
 
 @Injectable()
 export class GeminiLlmProvider implements ILlmProvider {
@@ -155,5 +160,89 @@ export class GeminiLlmProvider implements ILlmProvider {
     }
 
     throw new Error(`Failed to generate LLM text after ${maxRetries} attempts.`);
+  }
+
+  /**
+   * Streams text response chunk-by-chunk using Google GenAI SDK.
+   * Supports client abort signals, timeout monitoring, and real-time chunk callbacks.
+   */
+  async streamText(
+    prompt: string,
+    options?: LlmStreamOptions,
+    onChunk?: (chunk: string) => void | Promise<void>,
+  ): Promise<LlmGenerateResult> {
+    if (!this.aiClient) {
+      throw new Error(
+        'Gemini API key is not configured. Please set GEMINI_API_KEY in your environment variables.',
+      );
+    }
+
+    if (!prompt || prompt.trim().length === 0) {
+      throw new Error('Input prompt for LLM text generation cannot be empty.');
+    }
+
+    const requestedModel = options?.model || this.defaultModel;
+    const currentModel = requestedModel;
+
+    const config: any = {};
+    if (options?.systemInstruction) {
+      config.systemInstruction = options.systemInstruction;
+    }
+    if (typeof options?.temperature === 'number') {
+      config.temperature = options.temperature;
+    }
+    if (typeof options?.maxOutputTokens === 'number') {
+      config.maxOutputTokens = options.maxOutputTokens;
+    }
+    if (options?.abortSignal) {
+      config.abortSignal = options.abortSignal;
+    }
+
+    let accumulatedText = '';
+
+    try {
+      const responseStream = await this.aiClient.models.generateContentStream({
+        model: currentModel,
+        contents: prompt,
+        config: Object.keys(config).length > 0 ? config : undefined,
+      });
+
+      for await (const chunk of responseStream) {
+        if (options?.abortSignal?.aborted) {
+          this.logger.log('LLM stream aborted by client signal.');
+          break;
+        }
+
+        const delta = chunk.text || chunk.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        if (delta && delta.length > 0) {
+          accumulatedText += delta;
+          if (onChunk) {
+            await onChunk(delta);
+          }
+        }
+      }
+
+      return {
+        text: accumulatedText.trim(),
+        model: currentModel,
+        finishReason: 'STOP',
+      };
+    } catch (err: any) {
+      if (options?.abortSignal?.aborted || err.name === 'AbortError') {
+        this.logger.log('Stream ended due to client abort.');
+        return {
+          text: accumulatedText.trim(),
+          model: currentModel,
+          finishReason: 'ABORTED',
+        };
+      }
+
+      this.logger.error(`Error in generateContentStream: ${err.message}`);
+      const safeMessage = (err.message || 'LLM streaming error').replace(
+        /key=[a-zA-Z0-9_\-\.]+/gi,
+        'key=REDACTED',
+      );
+      throw new Error(safeMessage);
+    }
   }
 }

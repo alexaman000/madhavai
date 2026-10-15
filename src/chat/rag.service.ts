@@ -129,10 +129,22 @@ CORE PERSONALITY & GROUNDING RULES:
    * 4. Calls LLM with appropriate system instructions
    * 5. Validates citations via CitationVerifier (canonical existence, provenance, claim support)
    */
-  async generateAnswer(
+  /**
+   * Validates input, determines intent, performs retrieval, and formats prompts
+   * Shared by both synchronous generateAnswer and incremental streamAnswer.
+   */
+  private async prepareRagContext(
     dto: ChatRequestDto,
-    customLlmProvider?: ILlmProvider,
-  ): Promise<RagResponseDto> {
+    provider: ILlmProvider,
+  ): Promise<{
+    rawMessage: string;
+    corpusCoverage: 'comprehensive' | 'limited';
+    intent: QueryIntent;
+    relevantPassages: ScriptureSearchResultItem[];
+    systemInstruction: string;
+    userPrompt: string;
+    temperature: number;
+  }> {
     const rawMessage = dto.message ? dto.message.trim() : '';
     if (!rawMessage || rawMessage.length === 0) {
       throw new BadRequestException('Chat message cannot be empty.');
@@ -142,7 +154,6 @@ CORE PERSONALITY & GROUNDING RULES:
     }
 
     const limit = dto.limit && dto.limit >= 1 && dto.limit <= 10 ? dto.limit : 5;
-    const provider = customLlmProvider || this.llmProvider;
 
     if (!provider.isConfigured()) {
       throw new ServiceUnavailableException(
@@ -160,7 +171,6 @@ CORE PERSONALITY & GROUNDING RULES:
 
     // 2. Retrieval routing based on intent
     if (intent.type === 'SPECIFIC_VERSE' && intent.specificVerse) {
-      // Deterministic Verse Lookup
       try {
         const exactVerse = await this.scripturesService.getVerse(
           'bhagavad-gita',
@@ -187,10 +197,8 @@ CORE PERSONALITY & GROUNDING RULES:
         this.logger.warn(`Exact verse lookup for ${intent.specificVerse.chapter}.${intent.specificVerse.verse} failed: ${err.message}`);
       }
     } else if (intent.type === 'GENERAL_FACTUAL_OR_TECHNICAL' || intent.type === 'INVALID_VERSE_REFERENCE') {
-      // General technical or invalid verse question - bypass vector search and omit scripture grounding
       relevantPassages = [];
     } else {
-      // Spiritual, philosophical or emotional - perform semantic vector search
       let searchResults: ScriptureSearchResultItem[] = [];
       try {
         const searchResponse = await this.scripturesService.search({
@@ -254,12 +262,32 @@ If relevant passages are provided above, ground your philosophical answer in the
 If no relevant passages are provided, be honest and provide supportive, thoughtful guidance without inventing a verse.`;
     }
 
-    // 5. Generate answer through LLM provider
+    return {
+      rawMessage,
+      corpusCoverage,
+      intent,
+      relevantPassages,
+      systemInstruction,
+      userPrompt,
+      temperature: intent.type === 'GENERAL_FACTUAL_OR_TECHNICAL' ? 0.2 : 0.4,
+    };
+  }
+
+  /**
+   * Executes the intent-aware, validated RAG pipeline (synchronous non-streaming):
+   */
+  async generateAnswer(
+    dto: ChatRequestDto,
+    customLlmProvider?: ILlmProvider,
+  ): Promise<RagResponseDto> {
+    const provider = customLlmProvider || this.llmProvider;
+    const context = await this.prepareRagContext(dto, provider);
+
     let generatedText = '';
     try {
-      const llmResult = await provider.generateText(userPrompt, {
-        systemInstruction,
-        temperature: intent.type === 'GENERAL_FACTUAL_OR_TECHNICAL' ? 0.2 : 0.4,
+      const llmResult = await provider.generateText(context.userPrompt, {
+        systemInstruction: context.systemInstruction,
+        temperature: context.temperature,
         maxOutputTokens: 1024,
       });
       generatedText = llmResult.text || '';
@@ -270,9 +298,12 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
       );
     }
 
-    // 6. Step 12B: Citation Verification Layer
-    // Validates canonical existence, current turn provenance, and claim support
-    const verification = CitationVerifier.verify(generatedText, relevantPassages, intent);
+    // Step 12B: Citation Verification Layer
+    const verification = CitationVerifier.verify(
+      generatedText,
+      context.relevantPassages,
+      context.intent,
+    );
 
     if (verification.rejectedCitations.length > 0) {
       this.logger.log(
@@ -284,13 +315,92 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
 
     return {
       answer: verification.cleanedAnswer,
-      response: verification.cleanedAnswer, // Backwards compatibility for existing web frontend and APK
+      response: verification.cleanedAnswer,
       success: true,
       citations: verification.verifiedCitations,
       retrieval: {
         passagesUsed: verification.verifiedCitations.length,
-        corpusCoverage,
-        query: rawMessage,
+        corpusCoverage: context.corpusCoverage,
+        query: context.rawMessage,
+        model: provider.getDefaultModel(),
+        similarityThreshold: this.similarityThreshold,
+      },
+    };
+  }
+
+  /**
+   * Executes the intent-aware RAG pipeline with Server-Sent Events (SSE) streaming.
+   * Emits tokens as they generate, and runs CitationVerifier strictly on the completed answer.
+   */
+  async streamAnswer(
+    dto: ChatRequestDto,
+    onStart?: (info: { queryIntent: string; model: string }) => void | Promise<void>,
+    onDelta?: (chunk: string) => void | Promise<void>,
+    abortSignal?: AbortSignal,
+    customLlmProvider?: ILlmProvider,
+  ): Promise<RagResponseDto> {
+    const provider = customLlmProvider || this.llmProvider;
+    const context = await this.prepareRagContext(dto, provider);
+
+    if (onStart) {
+      await onStart({
+        queryIntent: context.intent.type,
+        model: provider.getDefaultModel(),
+      });
+    }
+
+    let generatedText = '';
+    try {
+      const llmResult = await provider.streamText(
+        context.userPrompt,
+        {
+          systemInstruction: context.systemInstruction,
+          temperature: context.temperature,
+          maxOutputTokens: 1024,
+          abortSignal,
+        },
+        async (chunk: string) => {
+          if (onDelta) {
+            await onDelta(chunk);
+          }
+        },
+      );
+      generatedText = llmResult.text || '';
+    } catch (err: any) {
+      if (abortSignal?.aborted) {
+        this.logger.log('Streaming answer aborted by client.');
+      } else {
+        this.logger.error(`LLM streaming error: ${err.message}`);
+        throw new ServiceUnavailableException(
+          `AI companion service is temporarily unavailable: ${err.message}`,
+        );
+      }
+    }
+
+    // Step 12B: Citation Verification Layer (Runs strictly after generation finishes)
+    const verification = CitationVerifier.verify(
+      generatedText,
+      context.relevantPassages,
+      context.intent,
+    );
+
+    if (verification.rejectedCitations.length > 0) {
+      this.logger.log(
+        `CitationVerifier filtered ${verification.rejectedCitations.length} citation(s): ${verification.rejectedCitations
+          .map((r) => `${r.reference} (${r.reason})`)
+          .join('; ')}`,
+      );
+    }
+
+    return {
+      answer: verification.cleanedAnswer,
+      response: verification.cleanedAnswer,
+      success: true,
+      citations: verification.verifiedCitations,
+      retrieval: {
+        passagesUsed: verification.verifiedCitations.length,
+        corpusCoverage: context.corpusCoverage,
+        query: context.rawMessage,
         model: provider.getDefaultModel(),
         similarityThreshold: this.similarityThreshold,
       },
