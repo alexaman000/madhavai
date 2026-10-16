@@ -288,7 +288,7 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
       const llmResult = await provider.generateText(context.userPrompt, {
         systemInstruction: context.systemInstruction,
         temperature: context.temperature,
-        maxOutputTokens: 1024,
+        maxOutputTokens: 2048,
       });
       generatedText = llmResult.text || '';
     } catch (err: any) {
@@ -356,7 +356,7 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
         {
           systemInstruction: context.systemInstruction,
           temperature: context.temperature,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
           abortSignal,
         },
         async (chunk: string) => {
@@ -367,8 +367,13 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
       );
       generatedText = llmResult.text || '';
     } catch (err: any) {
-      if (abortSignal?.aborted) {
+      if (
+        abortSignal?.aborted ||
+        err?.message === 'STREAM_ABORTED_BY_CLIENT' ||
+        err?.name === 'AbortError'
+      ) {
         this.logger.log('Streaming answer aborted by client.');
+        throw new Error('STREAM_ABORTED_BY_CLIENT');
       } else {
         this.logger.error(`LLM streaming error: ${err.message}`);
         throw new ServiceUnavailableException(

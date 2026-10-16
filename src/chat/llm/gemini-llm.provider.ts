@@ -186,7 +186,7 @@ export class GeminiLlmProvider implements ILlmProvider {
 
     for (const currentModel of candidateModels) {
       if (options?.abortSignal?.aborted) {
-        return { text: '', model: currentModel, finishReason: 'ABORTED' };
+        throw new Error('STREAM_ABORTED_BY_CLIENT');
       }
 
       const config: any = {};
@@ -216,7 +216,7 @@ export class GeminiLlmProvider implements ILlmProvider {
         for await (const chunk of responseStream) {
           if (options?.abortSignal?.aborted) {
             this.logger.log('LLM stream aborted by client signal.');
-            break;
+            throw new Error('STREAM_ABORTED_BY_CLIENT');
           }
 
           const delta = chunk.text || chunk.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -235,13 +235,13 @@ export class GeminiLlmProvider implements ILlmProvider {
           finishReason: 'STOP',
         };
       } catch (err: any) {
-        if (options?.abortSignal?.aborted || err.name === 'AbortError') {
+        if (
+          options?.abortSignal?.aborted ||
+          err.name === 'AbortError' ||
+          err.message === 'STREAM_ABORTED_BY_CLIENT'
+        ) {
           this.logger.log('Stream ended due to client abort.');
-          return {
-            text: accumulatedText.trim(),
-            model: currentModel,
-            finishReason: 'ABORTED',
-          };
+          throw new Error('STREAM_ABORTED_BY_CLIENT');
         }
 
         lastError = err;

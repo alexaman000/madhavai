@@ -39,15 +39,18 @@ export class ChatController {
     }
 
     const abortController = new AbortController();
-    req.on('close', () => {
-      if (!res.writableEnded) {
+    let isFinished = false;
+
+    // Listen to client disconnect on the response stream (NOT the incoming request upload stream)
+    res.on('close', () => {
+      if (!isFinished && !res.writableEnded) {
         abortController.abort();
       }
     });
 
     // 12-second heartbeat to prevent proxy read timeouts (e.g. Render / Cloudflare ECONNRESET)
     const heartbeat = setInterval(() => {
-      if (!res.writableEnded) {
+      if (!res.writableEnded && !isFinished) {
         res.write(': keepalive\n\n');
         if (typeof (res as any).flush === 'function') {
           (res as any).flush();
@@ -56,7 +59,7 @@ export class ChatController {
     }, 12000);
 
     const sendEvent = (event: string, data: any) => {
-      if (!res.writableEnded) {
+      if (!res.writableEnded && !isFinished) {
         res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         if (typeof (res as any).flush === 'function') {
           (res as any).flush();
@@ -72,15 +75,18 @@ export class ChatController {
         abortController.signal,
       );
 
-      sendEvent('done', finalResult);
-    } catch (err: any) {
       if (!abortController.signal.aborted) {
+        sendEvent('done', finalResult);
+      }
+    } catch (err: any) {
+      if (!abortController.signal.aborted && err?.message !== 'STREAM_ABORTED_BY_CLIENT') {
         sendEvent('error', {
           message: err.message || 'Stream processing encountered an error.',
           code: 'STREAM_ERROR',
         });
       }
     } finally {
+      isFinished = true;
       clearInterval(heartbeat);
       if (!res.writableEnded) {
         res.end();
