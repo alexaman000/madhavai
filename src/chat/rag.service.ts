@@ -3,9 +3,11 @@ import {
   Logger,
   BadRequestException,
   ServiceUnavailableException,
+  Optional,
 } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { ScripturesService } from '../scriptures/scriptures.service';
+import { MemoryService } from '../memory/memory.service';
 import { GeminiLlmProvider } from './llm/gemini-llm.provider';
 import { ILlmProvider } from './llm/llm.interface';
 import { ChatRequestDto } from './dto/chat-request.dto';
@@ -24,6 +26,7 @@ export class RagService {
     private readonly db: DatabaseService,
     private readonly scripturesService: ScripturesService,
     private readonly llmProvider: GeminiLlmProvider = new GeminiLlmProvider(),
+    @Optional() private readonly memoryService?: MemoryService,
   ) {
     CitationVerifier.init();
   }
@@ -136,6 +139,7 @@ CORE PERSONALITY & GROUNDING RULES:
   private async prepareRagContext(
     dto: ChatRequestDto,
     provider: ILlmProvider,
+    userId?: string,
   ): Promise<{
     rawMessage: string;
     corpusCoverage: 'comprehensive' | 'limited';
@@ -217,7 +221,25 @@ CORE PERSONALITY & GROUNDING RULES:
       );
     }
 
-    // 3. Conversation History Context
+    // 3. User Long-Term Memory Context (Selective, Privacy-Guarded)
+    let memoryBlock = '';
+    if (userId && this.memoryService) {
+      try {
+        const relevantMemories = await this.memoryService.getRelevantMemoriesForQuery(userId, rawMessage, 3);
+        if (relevantMemories.length > 0) {
+          memoryBlock =
+            'USER LONG-TERM CONTEXT & PREFERENCES (Known seeker background):\n' +
+            relevantMemories
+              .map((m) => `- [${m.category}] ${m.content}`)
+              .join('\n') +
+            '\n\n';
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to retrieve user memories: ${err.message}`);
+      }
+    }
+
+    // 4. Conversation History Context
     let historyBlock = '';
     if (Array.isArray(dto.history) && dto.history.length > 0) {
       const recentTurns = dto.history.slice(-6);
@@ -229,19 +251,19 @@ CORE PERSONALITY & GROUNDING RULES:
         '\n\n';
     }
 
-    // 4. Construct prompt and system instruction
+    // 5. Construct prompt and system instruction
     const systemInstruction = this.buildSystemInstruction(corpusCoverage, intent.type);
     const retrievalContext = this.buildRetrievalContext(relevantPassages);
 
     let userPrompt: string;
     if (intent.type === 'GENERAL_FACTUAL_OR_TECHNICAL') {
-      userPrompt = `${historyBlock}USER'S QUESTION:
+      userPrompt = `${memoryBlock}${historyBlock}USER'S QUESTION:
 "${rawMessage}"
 
 INSTRUCTIONS:
 Provide a direct, practical, and helpful answer. Do not force spiritual or scriptural citations.`;
     } else if (intent.type === 'INVALID_VERSE_REFERENCE' && intent.specificVerse) {
-      userPrompt = `${historyBlock}SEEKER'S QUESTION:
+      userPrompt = `${memoryBlock}${historyBlock}SEEKER'S QUESTION:
 "${rawMessage}"
 
 INSTRUCTIONS:
@@ -250,7 +272,7 @@ The Bhagavad Gita has exactly 18 chapters and 701 verses.
 Respectfully inform the seeker that Chapter ${intent.specificVerse.chapter} does not exist in the Bhagavad Gita (which ends at Chapter 18).
 Do not cite any verses or invent text. Offer to help them explore any valid chapter or topic.`;
     } else {
-      userPrompt = `${historyBlock}SEEKER'S QUESTION:
+      userPrompt = `${memoryBlock}${historyBlock}SEEKER'S QUESTION:
 "${rawMessage}"
 
 RETRIEVED SCRIPTURE PASSAGES FROM KNOWLEDGE BASE:
@@ -258,6 +280,8 @@ ${retrievalContext}
 
 INSTRUCTIONS:
 Respond to the seeker with compassion, wisdom, and practical clarity.
+If user background context is provided above, refer to their goals and preferences naturally when relevant.
+Do not invent past interactions or assume unmentioned facts.
 If relevant passages are provided above, ground your philosophical answer in them and cite Chapter and Verse.
 If no relevant passages are provided, be honest and provide supportive, thoughtful guidance without inventing a verse.`;
     }
@@ -278,10 +302,11 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
    */
   async generateAnswer(
     dto: ChatRequestDto,
+    userId?: string,
     customLlmProvider?: ILlmProvider,
   ): Promise<RagResponseDto> {
     const provider = customLlmProvider || this.llmProvider;
-    const context = await this.prepareRagContext(dto, provider);
+    const context = await this.prepareRagContext(dto, provider, userId);
 
     let generatedText = '';
     try {
@@ -337,10 +362,11 @@ If no relevant passages are provided, be honest and provide supportive, thoughtf
     onStart?: (info: { queryIntent: string; model: string }) => void | Promise<void>,
     onDelta?: (chunk: string) => void | Promise<void>,
     abortSignal?: AbortSignal,
+    userId?: string,
     customLlmProvider?: ILlmProvider,
   ): Promise<RagResponseDto> {
     const provider = customLlmProvider || this.llmProvider;
-    const context = await this.prepareRagContext(dto, provider);
+    const context = await this.prepareRagContext(dto, provider, userId);
 
     if (onStart) {
       await onStart({

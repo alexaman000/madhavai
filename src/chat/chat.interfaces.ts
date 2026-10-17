@@ -22,4 +22,7 @@ export interface RagResponseDto {
     model: string;
     similarityThreshold?: number;
   };
+  conversationId?: string;
+  conversationTitle?: string;
+  messageId?: string;
 }

@@ -23,6 +23,42 @@ export interface OtpRecord {
   consumed_at: string | null;
 }
 
+export interface ConversationRecord {
+  id: string;
+  user_id: string;
+  title: string;
+  mode: string;
+  language: string;
+  is_pinned?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MessageRecord {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  citations?: any[];
+  audio_url?: string | null;
+  credits_used?: number;
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface UserMemoryRecord {
+  id: string;
+  user_id: string;
+  content: string;
+  category: 'PREFERENCE' | 'CAREER' | 'STUDIES' | 'LIFE_GOAL' | 'EMOTIONAL_CONTEXT';
+  source?: string;
+  confidence?: number;
+  is_active?: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 @Injectable()
 export class DatabaseService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseService.name);
@@ -31,6 +67,9 @@ export class DatabaseService implements OnModuleInit {
   // In-memory fallback storage when Supabase URL/Key is not connected
   private inMemoryUsers: Map<string, UserRecord> = new Map();
   private inMemoryOtps: OtpRecord[] = [];
+  private inMemoryConversations: Map<string, ConversationRecord> = new Map();
+  private inMemoryMessages: MessageRecord[] = [];
+  private inMemoryMemories: Map<string, UserMemoryRecord> = new Map();
 
   onModuleInit() {
     const supabaseUrl = process.env.SUPABASE_URL;
@@ -699,6 +738,446 @@ export class DatabaseService implements OnModuleInit {
 
     scored.sort((a, b) => b.similarity - a.similarity);
     return scored.slice(0, limit);
+  }
+
+  // ==================== CONVERSATION OPERATIONS ====================
+
+  async createConversation(data: {
+    id?: string;
+    user_id: string;
+    title?: string;
+    mode?: string;
+    language?: string;
+  }): Promise<ConversationRecord> {
+    const now = new Date().toISOString();
+    const record: ConversationRecord = {
+      id: data.id || `conv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      user_id: data.user_id,
+      title: data.title || 'नया संवाद',
+      mode: data.mode || 'TALK',
+      language: data.language || 'hi',
+      is_pinned: false,
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (this.supabase) {
+      try {
+        const { data: inserted, error } = await this.supabase
+          .from('conversations')
+          .insert([record])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          this.logger.warn(`Supabase createConversation warning: ${error.message}. Saving to memory.`);
+        } else if (inserted) {
+          this.inMemoryConversations.set(inserted.id, inserted as ConversationRecord);
+          return inserted as ConversationRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase createConversation exception: ${err.message}`);
+      }
+    }
+
+    this.inMemoryConversations.set(record.id, record);
+    return record;
+  }
+
+  async getConversationsByUser(
+    userId: string,
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<ConversationRecord[]> {
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('conversations')
+          .select('*')
+          .eq('user_id', userId)
+          .order('updated_at', { ascending: false })
+          .range(offset, offset + limit - 1);
+
+        if (!error && data && data.length >= 0) {
+          // Sync to in-memory map
+          for (const c of data) {
+            this.inMemoryConversations.set(c.id, c as ConversationRecord);
+          }
+          return data as ConversationRecord[];
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase getConversationsByUser exception: ${err.message}`);
+      }
+    }
+
+    return Array.from(this.inMemoryConversations.values())
+      .filter((c) => c.user_id === userId)
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(offset, offset + limit);
+  }
+
+  async getConversationById(id: string, userId: string): Promise<ConversationRecord | null> {
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('conversations')
+          .select('*')
+          .eq('id', id)
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (!error && data) {
+          this.inMemoryConversations.set(data.id, data as ConversationRecord);
+          return data as ConversationRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase getConversationById exception: ${err.message}`);
+      }
+    }
+
+    const found = this.inMemoryConversations.get(id);
+    if (found && found.user_id === userId) return found;
+    return null;
+  }
+
+  async updateConversation(
+    id: string,
+    userId: string,
+    updates: Partial<ConversationRecord>,
+  ): Promise<ConversationRecord | null> {
+    const now = new Date().toISOString();
+    const updatePayload = {
+      ...updates,
+      updated_at: now,
+    };
+
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('conversations')
+          .update(updatePayload)
+          .eq('id', id)
+          .eq('user_id', userId)
+          .select()
+          .maybeSingle();
+
+        if (!error && data) {
+          this.inMemoryConversations.set(data.id, data as ConversationRecord);
+          return data as ConversationRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase updateConversation exception: ${err.message}`);
+      }
+    }
+
+    const current = this.inMemoryConversations.get(id);
+    if (current && current.user_id === userId) {
+      const merged = { ...current, ...updatePayload };
+      this.inMemoryConversations.set(id, merged);
+      return merged;
+    }
+    return null;
+  }
+
+  async touchConversation(id: string, userId: string): Promise<void> {
+    const now = new Date().toISOString();
+    if (this.supabase) {
+      try {
+        await this.supabase
+          .from('conversations')
+          .update({ updated_at: now })
+          .eq('id', id)
+          .eq('user_id', userId);
+      } catch {}
+    }
+    const current = this.inMemoryConversations.get(id);
+    if (current && current.user_id === userId) {
+      current.updated_at = now;
+      this.inMemoryConversations.set(id, current);
+    }
+  }
+
+  async deleteConversation(id: string, userId: string): Promise<boolean> {
+    if (this.supabase) {
+      try {
+        await this.supabase
+          .from('messages')
+          .delete()
+          .eq('conversation_id', id)
+          .eq('user_id', userId);
+
+        const { error } = await this.supabase
+          .from('conversations')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', userId);
+
+        if (!error) {
+          this.inMemoryConversations.delete(id);
+          this.inMemoryMessages = this.inMemoryMessages.filter((m) => m.conversation_id !== id);
+          return true;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase deleteConversation exception: ${err.message}`);
+      }
+    }
+
+    const exists = this.inMemoryConversations.has(id);
+    if (exists) {
+      this.inMemoryConversations.delete(id);
+      this.inMemoryMessages = this.inMemoryMessages.filter((m) => m.conversation_id !== id);
+      return true;
+    }
+    return false;
+  }
+
+  // ==================== MESSAGE OPERATIONS ====================
+
+  async createMessage(data: {
+    id?: string;
+    conversation_id: string;
+    user_id: string;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    citations?: any[];
+    audio_url?: string | null;
+    credits_used?: number;
+    metadata?: Record<string, any>;
+  }): Promise<MessageRecord> {
+    const now = new Date().toISOString();
+    const record: MessageRecord = {
+      id: data.id || `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      conversation_id: data.conversation_id,
+      user_id: data.user_id,
+      role: data.role,
+      content: data.content,
+      citations: data.citations || [],
+      audio_url: data.audio_url || null,
+      credits_used: typeof data.credits_used === 'number' ? data.credits_used : 0.1,
+      metadata: data.metadata || {},
+      created_at: now,
+    };
+
+    if (this.supabase) {
+      try {
+        const { data: inserted, error } = await this.supabase
+          .from('messages')
+          .insert([record])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          this.logger.warn(`Supabase createMessage warning: ${error.message}. Saving to memory.`);
+        } else if (inserted) {
+          this.inMemoryMessages.push(inserted as MessageRecord);
+          await this.touchConversation(data.conversation_id, data.user_id);
+          return inserted as MessageRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase createMessage exception: ${err.message}`);
+      }
+    }
+
+    this.inMemoryMessages.push(record);
+    await this.touchConversation(data.conversation_id, data.user_id);
+    return record;
+  }
+
+  async getMessagesByConversation(
+    conversationId: string,
+    userId: string,
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<MessageRecord[]> {
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', conversationId)
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .range(offset, offset + limit - 1);
+
+        if (!error && data && data.length >= 0) {
+          return data as MessageRecord[];
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase getMessagesByConversation exception: ${err.message}`);
+      }
+    }
+
+    return this.inMemoryMessages
+      .filter((m) => m.conversation_id === conversationId && m.user_id === userId)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .slice(offset, offset + limit);
+  }
+
+  // ==================== USER MEMORY OPERATIONS ====================
+
+  async createUserMemory(data: {
+    id?: string;
+    user_id: string;
+    content: string;
+    category: 'PREFERENCE' | 'CAREER' | 'STUDIES' | 'LIFE_GOAL' | 'EMOTIONAL_CONTEXT';
+    source?: string;
+    confidence?: number;
+  }): Promise<UserMemoryRecord> {
+    const now = new Date().toISOString();
+    const record: UserMemoryRecord = {
+      id: data.id || `mem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      user_id: data.user_id,
+      content: data.content.trim(),
+      category: data.category,
+      source: data.source || 'user_explicit',
+      confidence: typeof data.confidence === 'number' ? data.confidence : 1.0,
+      is_active: true,
+      created_at: now,
+      updated_at: now,
+    };
+
+    if (this.supabase) {
+      try {
+        const { data: inserted, error } = await this.supabase
+          .from('user_memories')
+          .insert([record])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          this.logger.warn(`Supabase createUserMemory warning: ${error.message}. Saving to memory.`);
+        } else if (inserted) {
+          this.inMemoryMemories.set(inserted.id, inserted as UserMemoryRecord);
+          return inserted as UserMemoryRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase createUserMemory exception: ${err.message}`);
+      }
+    }
+
+    this.inMemoryMemories.set(record.id, record);
+    return record;
+  }
+
+  async getUserMemories(userId: string, activeOnly: boolean = true): Promise<UserMemoryRecord[]> {
+    if (this.supabase) {
+      try {
+        let query = this.supabase
+          .from('user_memories')
+          .select('*')
+          .eq('user_id', userId);
+
+        if (activeOnly) {
+          query = query.eq('is_active', true);
+        }
+
+        query = query.order('updated_at', { ascending: false });
+        const { data, error } = await query;
+
+        if (!error && data) {
+          for (const m of data) {
+            this.inMemoryMemories.set(m.id, m as UserMemoryRecord);
+          }
+          return data as UserMemoryRecord[];
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase getUserMemories exception: ${err.message}`);
+      }
+    }
+
+    return Array.from(this.inMemoryMemories.values())
+      .filter((m) => m.user_id === userId && (!activeOnly || m.is_active))
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  }
+
+  async updateUserMemory(
+    id: string,
+    userId: string,
+    updates: Partial<UserMemoryRecord>,
+  ): Promise<UserMemoryRecord | null> {
+    const now = new Date().toISOString();
+    const updatePayload = {
+      ...updates,
+      updated_at: now,
+    };
+
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('user_memories')
+          .update(updatePayload)
+          .eq('id', id)
+          .eq('user_id', userId)
+          .select()
+          .maybeSingle();
+
+        if (!error && data) {
+          this.inMemoryMemories.set(data.id, data as UserMemoryRecord);
+          return data as UserMemoryRecord;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase updateUserMemory exception: ${err.message}`);
+      }
+    }
+
+    const current = this.inMemoryMemories.get(id);
+    if (current && current.user_id === userId) {
+      const merged = { ...current, ...updatePayload };
+      this.inMemoryMemories.set(id, merged);
+      return merged;
+    }
+    return null;
+  }
+
+  async deleteUserMemory(id: string, userId: string): Promise<boolean> {
+    if (this.supabase) {
+      try {
+        const { error } = await this.supabase
+          .from('user_memories')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', userId);
+
+        if (!error) {
+          this.inMemoryMemories.delete(id);
+          return true;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase deleteUserMemory exception: ${err.message}`);
+      }
+    }
+
+    const current = this.inMemoryMemories.get(id);
+    if (current && current.user_id === userId) {
+      this.inMemoryMemories.delete(id);
+      return true;
+    }
+    return false;
+  }
+
+  async clearAllUserMemories(userId: string): Promise<boolean> {
+    if (this.supabase) {
+      try {
+        const { error } = await this.supabase
+          .from('user_memories')
+          .delete()
+          .eq('user_id', userId);
+
+        if (!error) {
+          for (const [id, m] of this.inMemoryMemories.entries()) {
+            if (m.user_id === userId) this.inMemoryMemories.delete(id);
+          }
+          return true;
+        }
+      } catch (err: any) {
+        this.logger.warn(`Supabase clearAllUserMemories exception: ${err.message}`);
+      }
+    }
+
+    for (const [id, m] of this.inMemoryMemories.entries()) {
+      if (m.user_id === userId) this.inMemoryMemories.delete(id);
+    }
+    return true;
   }
 }
 

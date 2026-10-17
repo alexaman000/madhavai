@@ -9,6 +9,8 @@ import { AuthModule } from './auth/auth.module';
 import { ScripturesModule } from './scriptures/scriptures.module';
 import { EmbeddingsModule } from './embeddings/embeddings.module';
 import { TtsModule } from './tts/tts.module';
+import { ConversationsModule } from './conversations/conversations.module';
+import { MemoryModule } from './memory/memory.module';
 
 @Module({
   imports: [
@@ -25,6 +27,8 @@ import { TtsModule } from './tts/tts.module';
     ScripturesModule,
     EmbeddingsModule,
     TtsModule,
+    ConversationsModule,
+    MemoryModule,
   ],
   controllers: [],
   providers: [],

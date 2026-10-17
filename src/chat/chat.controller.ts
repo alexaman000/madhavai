@@ -1,17 +1,20 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, Req, Res, UseGuards } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ChatService } from './chat.service';
 import { ChatRequestDto } from './dto/chat-request.dto';
 import { RagResponseDto } from './chat.interfaces';
+import { OptionalAuthGuard } from '../auth/guards/optional-auth.guard';
 
 @Controller('chat')
+@UseGuards(OptionalAuthGuard)
 export class ChatController {
   constructor(private readonly chatService: ChatService) {}
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  async chat(@Body() dto: ChatRequestDto): Promise<RagResponseDto> {
-    return this.chatService.handleChat(dto);
+  async chat(@Body() dto: ChatRequestDto, @Req() req: any): Promise<RagResponseDto> {
+    const userId = req.user?.id;
+    return this.chatService.handleChat(dto, userId);
   }
 
   /**
@@ -21,9 +24,10 @@ export class ChatController {
   @Post('stream')
   async chatStream(
     @Body() dto: ChatRequestDto,
-    @Req() req: Request,
+    @Req() req: any,
     @Res() res: Response,
   ): Promise<void> {
+    const userId = req.user?.id;
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
@@ -73,6 +77,7 @@ export class ChatController {
         (info) => sendEvent('start', info),
         (chunk) => sendEvent('delta', { text: chunk }),
         abortController.signal,
+        userId,
       );
 
       if (!abortController.signal.aborted) {

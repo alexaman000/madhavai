@@ -9,6 +9,10 @@ export class ChatRequestDto {
   message: string;
 
   @IsOptional()
+  @IsString()
+  conversationId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt({ message: 'limit must be an integer' })
   @Min(1, { message: 'limit must be at least 1' })
