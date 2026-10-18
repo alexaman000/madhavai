@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MaxLength, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsString, MaxLength, IsOptional, IsInt, Min, Max, IsArray } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
 export class ChatRequestDto {
@@ -25,4 +25,8 @@ export class ChatRequestDto {
 
   @IsOptional()
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+
+  @IsOptional()
+  @IsArray()
+  clientMemories?: string[];
 }

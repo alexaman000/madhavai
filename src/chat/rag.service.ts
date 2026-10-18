@@ -223,20 +223,37 @@ CORE PERSONALITY & GROUNDING RULES:
 
     // 3. User Long-Term Memory Context (Selective, Privacy-Guarded)
     let memoryBlock = '';
+    const memoriesToInject: Array<{ category: string; content: string }> = [];
+
     if (userId && this.memoryService) {
       try {
         const relevantMemories = await this.memoryService.getRelevantMemoriesForQuery(userId, rawMessage, 3);
-        if (relevantMemories.length > 0) {
-          memoryBlock =
-            'USER LONG-TERM CONTEXT & PREFERENCES (Known seeker background):\n' +
-            relevantMemories
-              .map((m) => `- [${m.category}] ${m.content}`)
-              .join('\n') +
-            '\n\n';
-        }
+        memoriesToInject.push(...relevantMemories);
       } catch (err: any) {
         this.logger.warn(`Failed to retrieve user memories: ${err.message}`);
       }
+    }
+
+    // Support device-local memories from mobile/guest seekers
+    if (Array.isArray(dto.clientMemories) && dto.clientMemories.length > 0) {
+      for (const cm of dto.clientMemories.slice(0, 3)) {
+        if (typeof cm === 'string' && cm.trim()) {
+          const trimmed = cm.trim();
+          // Avoid duplicate entries if already retrieved from DB
+          if (!memoriesToInject.some((m) => m.content.toLowerCase() === trimmed.toLowerCase())) {
+            memoriesToInject.push({ category: 'PREFERENCE', content: trimmed });
+          }
+        }
+      }
+    }
+
+    if (memoriesToInject.length > 0) {
+      memoryBlock =
+        'USER LONG-TERM CONTEXT & PREFERENCES (Known seeker background):\n' +
+        memoriesToInject
+          .map((m) => `- [${m.category}] ${m.content}`)
+          .join('\n') +
+        '\n\n';
     }
 
     // 4. Conversation History Context
