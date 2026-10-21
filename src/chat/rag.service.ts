@@ -236,12 +236,19 @@ CORE PERSONALITY & GROUNDING RULES:
 
     // Support device-local memories from mobile/guest seekers
     if (Array.isArray(dto.clientMemories) && dto.clientMemories.length > 0) {
-      for (const cm of dto.clientMemories.slice(0, 3)) {
+      for (const cm of dto.clientMemories.slice(0, 8)) {
         if (typeof cm === 'string' && cm.trim()) {
           const trimmed = cm.trim();
           // Avoid duplicate entries if already retrieved from DB
           if (!memoriesToInject.some((m) => m.content.toLowerCase() === trimmed.toLowerCase())) {
-            memoriesToInject.push({ category: 'PREFERENCE', content: trimmed });
+            let cat = 'PREFERENCE';
+            let contentText = trimmed;
+            const catMatch = trimmed.match(/^\[([A-Z_]+)\]\s*(.*)$/);
+            if (catMatch) {
+              cat = catMatch[1];
+              contentText = catMatch[2];
+            }
+            memoriesToInject.push({ category: cat, content: contentText });
           }
         }
       }
